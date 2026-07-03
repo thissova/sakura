@@ -26,4 +26,3 @@ dist-ssr
 .vercel
 
 server/credentials.json
-server/content.json
