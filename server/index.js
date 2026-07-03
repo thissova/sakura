@@ -447,7 +447,7 @@ if (!IS_VERCEL) {
   const DIST_DIR = join(ROOT, "dist");
   if (existsSync(DIST_DIR)) {
     app.use(express.static(DIST_DIR));
-    app.get("*", (req, res) => {
+    app.get("*path", (req, res) => {
       res.sendFile(join(DIST_DIR, "index.html"));
     });
   }
