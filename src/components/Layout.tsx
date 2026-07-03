@@ -167,7 +167,7 @@ export function Layout() {
             <div className="flex flex-col sm:flex-row gap-6 sm:gap-12 items-center text-sakura-cream/90">
               <div className="flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-sakura-pink" />
-                <span>Praha a okolí</span>
+                <span>{t("footer.location")}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Phone className="w-5 h-5 text-sakura-pink" />

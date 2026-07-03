@@ -309,7 +309,7 @@ export function Contact() {
                       id="message"
                       rows={5}
                       className="w-full px-6 py-4 rounded-2xl border border-gray-200 focus:border-sakura-green focus:ring-2 focus:ring-sakura-green/20 outline-none transition-all bg-sakura-cream/50 resize-none text-lg"
-                      placeholder="Dobrý den, měl bych zájem o..."
+                      placeholder={t("contact.form.msg.placeholder")}
                     />
                   </div>
 

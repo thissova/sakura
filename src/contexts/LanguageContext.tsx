@@ -195,9 +195,16 @@ const translations: Record<string, Record<Lang, string>> = {
   "404.back": { cs: "Zpět na úvod", en: "Back to home" },
 
   // Footer
+  "footer.location": { cs: "Praha a okolí", en: "Prague and surroundings" },
   "footer.rights": {
     cs: "© 2026 SAKURA Úklidové Služby. Všechna práva vyhrazena.",
     en: "© 2026 SAKURA Cleaning Services. All rights reserved.",
+  },
+
+  // Contact placeholders
+  "contact.form.msg.placeholder": {
+    cs: "Dobrý den, měl bych zájem o...",
+    en: "Hello, I would be interested in...",
   },
 };
 
