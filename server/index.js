@@ -1,4 +1,5 @@
 import express from "express";
+import compression from "compression";
 import multer from "multer";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -281,13 +282,34 @@ function isValidSession(token) {
 }
 
 const app = express();
+// Without this, JS/CSS ship uncompressed — the React bundle alone goes out at
+// 160 kB instead of 53 kB. Images are already compressed, so they're skipped.
+app.use(compression());
 app.use(cors({ origin: true, credentials: true }));
 app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 
+// Vite fingerprints its bundles (index-aVYPB03W.js), so those are safe to cache
+// forever. Images keep stable names across deploys, so they must revalidate —
+// otherwise a browser that cached the old copy would never see an updated one.
+const HASHED_ASSET = /-[A-Za-z0-9_-]{8,}\.(js|css)$/;
+
+function setAssetCacheHeaders(res, filePath) {
+  if (HASHED_ASSET.test(filePath)) {
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  } else {
+    // "no-cache" still caches — it just forces an ETag revalidation first,
+    // so a changed image is picked up immediately and an unchanged one costs a 304.
+    res.setHeader("Cache-Control", "no-cache");
+  }
+}
+
 // Serve uploaded assets (local dev)
 if (!IS_VERCEL) {
-  app.use("/assets", express.static(ASSETS_DIR));
+  app.use(
+    "/assets",
+    express.static(ASSETS_DIR, { setHeaders: setAssetCacheHeaders }),
+  );
 }
 
 // ── Admin Auth ───────────────────────────────────────────────────────────────
@@ -446,8 +468,11 @@ app.post("/api/contact", async (req, res) => {
 if (!IS_VERCEL) {
   const DIST_DIR = join(ROOT, "dist");
   if (existsSync(DIST_DIR)) {
-    app.use(express.static(DIST_DIR));
+    app.use(express.static(DIST_DIR, { setHeaders: setAssetCacheHeaders }));
     app.get("*path", (req, res) => {
+      // index.html references the hashed bundles, so it must never be cached —
+      // a stale copy would point at bundles that no longer exist.
+      res.setHeader("Cache-Control", "no-cache");
       res.sendFile(join(DIST_DIR, "index.html"));
     });
   }

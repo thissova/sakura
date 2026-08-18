@@ -59,7 +59,10 @@ export function Layout() {
   return (
     <div className="min-h-screen flex flex-col bg-sakura-cream">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-sakura-cream/90 backdrop-blur-md border-b border-sakura-pink/20">
+      {/* Blur is desktop-only: a backdrop-filter on a sticky element repaints
+          the blurred region every scroll frame, which visibly janks on mobile.
+          Phones get an opaque background instead — same look, no cost. */}
+      <header className="sticky top-0 z-50 bg-sakura-cream md:bg-sakura-cream/90 md:backdrop-blur-md border-b border-sakura-pink/20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             {/* Logo */}

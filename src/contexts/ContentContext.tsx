@@ -19,7 +19,6 @@ export interface ServiceData {
 
 interface ContentContextType {
   services: ServiceData[];
-  isLoaded: boolean;
   updateService: (id: string, patch: Partial<ServiceData>) => void;
   addService: (service: ServiceData) => void;
   deleteService: (id: string) => void;
@@ -79,8 +78,10 @@ const DEFAULT_SERVICES: ServiceData[] = [
 ];
 
 export function ContentProvider({ children }: { children: React.ReactNode }) {
-  const [services, setServices] = useState<ServiceData[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
+  // Seed with the bundled defaults so the first paint is immediate and correct
+  // instead of waiting on a network round trip. Server content replaces this
+  // as soon as it arrives; the two match unless the admin has edited something.
+  const [services, setServices] = useState<ServiceData[]>(DEFAULT_SERVICES);
 
   useEffect(() => {
     fetch("/api/content")
@@ -89,13 +90,10 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
         return r.json();
       })
       .then((data: ServiceData[]) => {
-        setServices(data);
-        setIsLoaded(true);
+        if (Array.isArray(data) && data.length) setServices(data);
       })
       .catch(() => {
         console.warn("Could not load content from server — using defaults");
-        setServices(DEFAULT_SERVICES);
-        setIsLoaded(true);
       });
   }, []);
 
@@ -153,7 +151,6 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
     <ContentContext.Provider
       value={{
         services,
-        isLoaded,
         updateService,
         addService,
         deleteService,
