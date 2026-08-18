@@ -282,6 +282,23 @@ function isValidSession(token) {
 }
 
 const app = express();
+
+// Both sakura-uklid.com and www.sakura-uklid.com point at this app, which would
+// let Google index the same pages twice. Canonical host is www — it is what the
+// sitemap, canonical tag and Open Graph URLs all use — so send the apex there.
+// Matches the apex only: the railway.app domain and localhost are left alone.
+const CANONICAL_HOST = "www.sakura-uklid.com";
+const APEX_HOST = "sakura-uklid.com";
+
+app.use((req, res, next) => {
+  // req.host drops the port; Railway terminates TLS and forwards the original
+  // host, so this sees the name the visitor actually typed.
+  if (req.hostname === APEX_HOST) {
+    return res.redirect(301, `https://${CANONICAL_HOST}${req.originalUrl}`);
+  }
+  next();
+});
+
 // Without this, JS/CSS ship uncompressed — the React bundle alone goes out at
 // 160 kB instead of 53 kB. Images are already compressed, so they're skipped.
 app.use(compression());
