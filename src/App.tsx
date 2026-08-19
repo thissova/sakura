@@ -38,18 +38,35 @@ function AppRoutes() {
   return (
     <BrowserRouter>
       <ScrollToTop />
-      <Suspense fallback={<PageLoader />}>
-        <Routes>
-          <Route path="/northwind" element={<Admin />} />
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Home />} />
-            <Route path="o-sluzbach" element={<Services />} />
-            <Route path="cenik" element={<Pricing />} />
-            <Route path="kontakt" element={<Contact />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Suspense>
+      {/* No Suspense boundary around <Routes>: it would sit above <Layout>, so
+          the first visit to a lazy route — when its chunk is still downloading —
+          would tear down the header along with the page and rebuild it after,
+          which left the mobile menu stuck open. Layout owns its own boundary
+          around <Outlet>, so only the page area waits. */}
+      <Routes>
+        <Route
+          path="/northwind"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <Admin />
+            </Suspense>
+          }
+        />
+        <Route path="/" element={<Layout />}>
+          <Route index element={<Home />} />
+          <Route path="o-sluzbach" element={<Services />} />
+          <Route path="cenik" element={<Pricing />} />
+          <Route path="kontakt" element={<Contact />} />
+        </Route>
+        <Route
+          path="*"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <NotFound />
+            </Suspense>
+          }
+        />
+      </Routes>
     </BrowserRouter>
   );
 }

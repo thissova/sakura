@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { Outlet, NavLink, Link, useLocation } from "react-router-dom";
 import { Calendar, Menu, X, MapPin, Phone, Mail } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -163,7 +163,16 @@ export function Layout() {
 
       {/* Main Content */}
       <main className="flex-grow">
-        <Outlet />
+        {/* The boundary lives here rather than around <Routes> so that a lazy
+            page still downloading never unmounts the header, menu or footer. */}
+        <Suspense
+          fallback={
+            <div className="min-h-[60vh] flex items-center justify-center">
+              <div className="w-10 h-10 rounded-full border-4 border-sakura-pink/30 border-t-sakura-pink animate-spin" />
+            </div>
+          }>
+          <Outlet />
+        </Suspense>
       </main>
 
       {/* Footer */}

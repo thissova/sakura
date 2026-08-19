@@ -501,7 +501,20 @@ export default app;
 // Start server only in local dev
 if (!IS_VERCEL) {
   const PORT = process.env.PORT || 3001;
-  app.listen(PORT, () =>
+  const server = app.listen(PORT, () =>
     console.log(`🌸 Server running on http://localhost:${PORT}`)
   );
+
+  // Railway sends SIGTERM to the old container when a new deploy takes over.
+  // Without this the process is killed outright and npm prints the exit as an
+  // error ("npm error signal SIGTERM"), which reads like a crash in the logs.
+  // Closing the server lets in-flight requests finish and exits cleanly.
+  for (const signal of ["SIGTERM", "SIGINT"]) {
+    process.on(signal, () => {
+      console.log(`${signal} received, shutting down`);
+      server.close(() => process.exit(0));
+      // Do not wait forever on a hung keep-alive connection.
+      setTimeout(() => process.exit(0), 10000).unref();
+    });
+  }
 }
