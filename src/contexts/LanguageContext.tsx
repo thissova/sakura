@@ -194,6 +194,13 @@ const translations: Record<string, Record<Lang, string>> = {
   },
   "404.back": { cs: "Zpět na úvod", en: "Back to home" },
 
+  // Thank-you page
+  "thanks.urgent": {
+    cs: "Potřebujete se ozvat dříve? Zavolejte nám nebo napište na WhatsApp:",
+    en: "Need to reach us sooner? Call us or write on WhatsApp:",
+  },
+  "thanks.back": { cs: "Zpět na úvod", en: "Back to home" },
+
   // Footer
   "footer.location": { cs: "Praha a okolí", en: "Prague and surroundings" },
   "footer.rights": {

@@ -19,6 +19,9 @@ const Pricing = lazy(() =>
 const Contact = lazy(() =>
   import("./pages/Contact").then((m) => ({ default: m.Contact })),
 );
+const ThankYou = lazy(() =>
+  import("./pages/ThankYou").then((m) => ({ default: m.ThankYou })),
+);
 const Admin = lazy(() =>
   import("./pages/Admin").then((m) => ({ default: m.Admin })),
 );
@@ -57,6 +60,7 @@ function AppRoutes() {
           <Route path="o-sluzbach" element={<Services />} />
           <Route path="cenik" element={<Pricing />} />
           <Route path="kontakt" element={<Contact />} />
+          <Route path="dekujeme" element={<ThankYou />} />
         </Route>
         <Route
           path="*"

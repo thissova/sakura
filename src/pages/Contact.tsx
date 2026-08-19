@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { LazyImage } from "../components/LazyImage";
 import { motion } from "framer-motion";
 import { Phone, Mail, MessageCircle, Send, Check } from "lucide-react";
@@ -10,10 +10,10 @@ export function Contact() {
   const { services } = useContent();
   const { t, lang } = useLang();
   const location = useLocation();
+  const navigate = useNavigate();
   const formRef = useRef<HTMLFormElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [serviceError, setServiceError] = useState(false);
   const [hasVacuum, setHasVacuum] = useState<"ano" | "ne" | null>(null);
@@ -64,8 +64,9 @@ export function Contact() {
     }
 
     setIsSubmitting(false);
-    setIsSuccess(true);
-    setTimeout(() => setIsSuccess(false), 5000);
+    // Replace the entry so the browser Back button returns to the site rather
+    // than to a filled-in form that would resubmit.
+    navigate("/dekujeme", { replace: true });
   };
 
   return (
@@ -152,24 +153,10 @@ export function Contact() {
                 {t("contact.form.title")}
               </h2>
 
-              {isSuccess ? (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="bg-sakura-green/10 border border-sakura-green text-sakura-green p-10 rounded-3xl text-center">
-                  <div className="w-24 h-24 bg-sakura-green text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
-                    <Send className="w-12 h-12" />
-                  </div>
-                  <h3 className="text-3xl font-bold mb-4">
-                    {t("contact.form.success.title")}
-                  </h3>
-                  <p className="text-xl">{t("contact.form.success.sub")}</p>
-                </motion.div>
-              ) : (
-                <form
-                  ref={formRef}
-                  onSubmit={handleSubmit}
-                  className="space-y-8">
+              <form
+                ref={formRef}
+                onSubmit={handleSubmit}
+                className="space-y-8">
                   <div className="grid md:grid-cols-2 gap-8">
                     <div className="space-y-3">
                       <label
@@ -358,8 +345,7 @@ export function Contact() {
                       </>
                     )}
                   </button>
-                </form>
-              )}
+              </form>
             </div>
           </motion.div>
         </div>
