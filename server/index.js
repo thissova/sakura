@@ -506,9 +506,10 @@ if (!IS_VERCEL) {
   );
 
   // Railway sends SIGTERM to the old container when a new deploy takes over.
-  // Without this the process is killed outright and npm prints the exit as an
-  // error ("npm error signal SIGTERM"), which reads like a crash in the logs.
-  // Closing the server lets in-flight requests finish and exits cleanly.
+  // Closing the server lets in-flight requests finish and exits 0 instead of
+  // dying on the signal. This only has any effect because railway.json starts
+  // node directly: under `npm start` the signal goes to npm, which reports it
+  // as "npm error signal SIGTERM" no matter what this process does.
   for (const signal of ["SIGTERM", "SIGINT"]) {
     process.on(signal, () => {
       console.log(`${signal} received, shutting down`);
