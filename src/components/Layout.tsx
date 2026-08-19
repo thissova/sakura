@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Outlet, NavLink, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Outlet, NavLink, Link, useLocation } from "react-router-dom";
 import { Calendar, Menu, X, MapPin, Phone, Mail } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLang } from "../contexts/LanguageContext";
@@ -48,7 +48,17 @@ function LangToggle({ mobile }: { mobile?: boolean }) {
 
 export function Layout() {
   const { t } = useLang();
+  const { pathname } = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Close the mobile menu whenever the route actually changes. The per-link
+  // onClick below is not enough on its own: on iOS it can fail to take effect,
+  // leaving the panel open over the new page. Keying off pathname also covers
+  // the back/forward buttons, which no click handler ever sees.
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
+
   const navLinks = [
     { to: "/", label: t("nav.home") },
     { to: "/o-sluzbach", label: t("nav.services") },
