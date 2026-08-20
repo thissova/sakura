@@ -38,6 +38,22 @@ const SPREADSHEET_ID = "1Dz6Yq2D5fU9xYKXuobrsxV0oOB_kZjw48y4CWh8eT8E";
 const SHEET_NAME = "Poptávky";
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── Google reviews config ───────────────────────────────────────────────────
+// A plain API key, not the Sheets service account — the Places API only accepts
+// a key. Kept server-side so it is never exposed to the browser.
+const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY || "";
+// Optional. The listing's Maps URL only carries the name and coordinates, not
+// the ChIJ-style id the API wants, so when this is unset the place is looked up
+// by name and pinned to the coordinates below.
+const GOOGLE_PLACE_ID = process.env.GOOGLE_PLACE_ID || "";
+const GOOGLE_PLACE_NAME = process.env.GOOGLE_PLACE_NAME || "SAKURA Cleaning Service";
+const GOOGLE_PLACE_LAT = Number(process.env.GOOGLE_PLACE_LAT || 50.1266504);
+const GOOGLE_PLACE_LNG = Number(process.env.GOOGLE_PLACE_LNG || 14.4645764);
+// Places API bills per request, so responses are cached rather than fetched per
+// visitor. Reviews change rarely; a few hours of staleness is invisible.
+const REVIEWS_TTL_MS = 6 * 60 * 60 * 1000;
+// ─────────────────────────────────────────────────────────────────────────────
+
 if (!IS_VERCEL) {
   mkdirSync(ASSETS_DIR, { recursive: true });
 
@@ -421,6 +437,113 @@ app.get("/api/assets/:filename", (req, res) => {
     res.sendFile(filePath);
   } else {
     res.status(404).json({ error: "Not found" });
+  }
+});
+
+// ── Google reviews ───────────────────────────────────────────────────────────
+
+const reviewsCache = new Map(); // languageCode -> { data, expires }
+let resolvedPlaceId = GOOGLE_PLACE_ID || null;
+
+/**
+ * Turns the business name into a Places id. Only runs when GOOGLE_PLACE_ID is
+ * not set, and only once — the id never changes, so it is kept for the process
+ * lifetime rather than looked up per request.
+ */
+async function resolvePlaceId() {
+  if (resolvedPlaceId) return resolvedPlaceId;
+
+  const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
+      "X-Goog-FieldMask": "places.id,places.displayName",
+    },
+    body: JSON.stringify({
+      textQuery: GOOGLE_PLACE_NAME,
+      maxResultCount: 1,
+      // Bias to the listing's own coordinates so a similarly named business
+      // elsewhere cannot win the match.
+      locationBias: {
+        circle: {
+          center: { latitude: GOOGLE_PLACE_LAT, longitude: GOOGLE_PLACE_LNG },
+          radius: 500,
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Places search returned ${response.status}: ${await response.text()}`);
+  }
+
+  const found = (await response.json()).places?.[0];
+  if (!found?.id) throw new Error(`No place matched "${GOOGLE_PLACE_NAME}"`);
+
+  console.log(`Resolved place "${found.displayName?.text ?? GOOGLE_PLACE_NAME}" -> ${found.id}`);
+  resolvedPlaceId = found.id;
+  return resolvedPlaceId;
+}
+
+app.get("/api/reviews", async (req, res) => {
+  const lang = req.query.lang === "en" ? "en" : "cs";
+
+  // Before the key is configured, report "not set up" rather than failing, so
+  // the front end can simply leave the section out.
+  if (!GOOGLE_PLACES_API_KEY) {
+    return res.json({ configured: false, reviews: [] });
+  }
+
+  const cached = reviewsCache.get(lang);
+  if (cached && cached.expires > Date.now()) {
+    return res.json(cached.data);
+  }
+
+  try {
+    const placeId = await resolvePlaceId();
+    const url =
+      `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}` +
+      `?languageCode=${lang}`;
+    const response = await fetch(url, {
+      headers: {
+        "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
+        // Places bills by the fields requested, so ask only for what is shown.
+        "X-Goog-FieldMask": "rating,userRatingCount,googleMapsUri,reviews",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Places API returned ${response.status}: ${await response.text()}`);
+    }
+
+    const place = await response.json();
+    const data = {
+      configured: true,
+      rating: typeof place.rating === "number" ? place.rating : null,
+      total: place.userRatingCount ?? 0,
+      url: place.googleMapsUri ?? null,
+      // Google caps this at five and picks which ones; there is no way to ask
+      // for more or to choose them.
+      reviews: (place.reviews ?? [])
+        .map((r) => ({
+          author: r.authorAttribution?.displayName ?? "",
+          avatar: r.authorAttribution?.photoUri ?? null,
+          profileUrl: r.authorAttribution?.uri ?? null,
+          rating: typeof r.rating === "number" ? r.rating : 5,
+          text: (r.text?.text ?? r.originalText?.text ?? "").trim(),
+          relativeTime: r.relativePublishTimeDescription ?? "",
+        }))
+        .filter((r) => r.text && r.author),
+    };
+
+    reviewsCache.set(lang, { data, expires: Date.now() + REVIEWS_TTL_MS });
+    res.json(data);
+  } catch (err) {
+    console.error("Failed to load Google reviews:", err.message);
+    // Prefer showing slightly stale reviews over an empty section.
+    if (cached) return res.json(cached.data);
+    res.json({ configured: true, error: true, reviews: [] });
   }
 });
 

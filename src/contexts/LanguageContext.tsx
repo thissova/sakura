@@ -194,6 +194,19 @@ const translations: Record<string, Record<Lang, string>> = {
   },
   "404.back": { cs: "Zpět na úvod", en: "Back to home" },
 
+  // Google reviews
+  "reviews.title": {
+    cs: "Co říkají naši zákazníci",
+    en: "What our customers say",
+  },
+  "reviews.google": { cs: "Recenze", en: "Reviews" },
+  "reviews.viewAll": {
+    cs: "Zobrazit všechny recenze na Google",
+    en: "See all reviews on Google",
+  },
+  "reviews.prev": { cs: "Předchozí recenze", en: "Previous review" },
+  "reviews.next": { cs: "Další recenze", en: "Next review" },
+
   // Thank-you page
   "thanks.urgent": {
     cs: "Potřebujete se ozvat dříve? Zavolejte nám nebo napište na WhatsApp:",

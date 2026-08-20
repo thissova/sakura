@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, ShieldCheck, Users } from "lucide-react";
 import { useContent } from "../contexts/ContentContext";
 import { LazyImage } from "../components/LazyImage";
+import { GoogleReviews } from "../components/GoogleReviews";
 import { getServiceIcon } from "../utils/serviceIcons";
 import { useLang } from "../contexts/LanguageContext";
 const heroImage = "/assets/hero.jpeg";
@@ -52,6 +53,9 @@ export function Home() {
           </div>
         </div>
       </section>
+
+      {/* Google reviews — renders nothing until the Places key is configured */}
+      <GoogleReviews />
 
       {/* Tagline */}
       <section className="bg-sakura-cream py-14 md:py-20">
