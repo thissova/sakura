@@ -446,6 +446,25 @@ const reviewsCache = new Map(); // languageCode -> { data, expires }
 let resolvedPlaceId = GOOGLE_PLACE_ID || null;
 
 /**
+ * Google replies with { error: { code, status, message } }. Surface just the
+ * code and status — enough to tell "API not enabled" from "billing disabled"
+ * from "key restricted", and neither field can contain the key itself.
+ */
+async function describeFailure(response) {
+  let code = response.status;
+  let status = "";
+  try {
+    const body = await response.json();
+    code = body?.error?.code ?? code;
+    status = body?.error?.status ?? "";
+    console.error("Places API error:", JSON.stringify(body?.error ?? body));
+  } catch {
+    console.error("Places API error: non-JSON response", response.status);
+  }
+  return `${code} ${status}`.trim();
+}
+
+/**
  * Turns the business name into a Places id. Only runs when GOOGLE_PLACE_ID is
  * not set, and only once — the id never changes, so it is kept for the process
  * lifetime rather than looked up per request.
@@ -475,7 +494,7 @@ async function resolvePlaceId() {
   });
 
   if (!response.ok) {
-    throw new Error(`Places search returned ${response.status}: ${await response.text()}`);
+    throw new Error(`place lookup failed: ${await describeFailure(response)}`);
   }
 
   const found = (await response.json()).places?.[0];
@@ -514,7 +533,7 @@ app.get("/api/reviews", async (req, res) => {
     });
 
     if (!response.ok) {
-      throw new Error(`Places API returned ${response.status}: ${await response.text()}`);
+      throw new Error(`place details failed: ${await describeFailure(response)}`);
     }
 
     const place = await response.json();
@@ -543,7 +562,9 @@ app.get("/api/reviews", async (req, res) => {
     console.error("Failed to load Google reviews:", err.message);
     // Prefer showing slightly stale reviews over an empty section.
     if (cached) return res.json(cached.data);
-    res.json({ configured: true, error: true, reviews: [] });
+    // `reason` carries only Google's status code, so it is safe to return and
+    // saves digging through deploy logs when the key or billing is misconfigured.
+    res.json({ configured: true, error: true, reason: err.message, reviews: [] });
   }
 });
 
