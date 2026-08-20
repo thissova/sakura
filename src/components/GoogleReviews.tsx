@@ -21,6 +21,32 @@ interface ReviewsPayload {
   reviews: Review[];
 }
 
+// The badge and the section below both need this, and the payload is the same
+// for everyone, so the request is shared rather than made twice per page load.
+let pending: Promise<ReviewsPayload | null> | null = null;
+function loadReviews() {
+  if (!pending) {
+    pending = fetch("/api/reviews")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .catch(() => null);
+  }
+  return pending;
+}
+
+function useGoogleReviews() {
+  const [data, setData] = useState<ReviewsPayload | null>(null);
+  useEffect(() => {
+    let alive = true;
+    loadReviews().then((d) => {
+      if (alive) setData(d);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return data;
+}
+
 function GoogleWordmark() {
   const letters: [string, string][] = [
     ["G", "#4285F4"],
@@ -64,35 +90,65 @@ function Stars({ value, className = "w-5 h-5" }: { value: number; className?: st
   );
 }
 
+const formatRating = (value: number, lang: string) =>
+  value.toFixed(1).replace(".", lang === "cs" ? "," : ".");
+
+/**
+ * Compact rating badge, sized to sit on top of the hero photo. Solid rather
+ * than blurred: a backdrop-filter over a scrolling background image is the same
+ * thing that janked the sticky header on phones.
+ */
+export function GoogleRatingBadge() {
+  const { lang } = useLang();
+  const data = useGoogleReviews();
+
+  if (!data?.configured || typeof data.rating !== "number") return null;
+
+  const badge = (
+    <span className="inline-flex items-center gap-3 bg-white/95 rounded-2xl px-5 py-3 shadow-xl">
+      <GoogleWordmark />
+      <span className="font-bold text-[#1A1A1A] text-lg leading-none">
+        {formatRating(data.rating, lang)}
+      </span>
+      <Stars value={data.rating} className="w-[18px] h-[18px]" />
+      <span className="text-gray-500 text-sm leading-none">({data.total})</span>
+    </span>
+  );
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.35, duration: 0.5 }}
+      className="mt-8">
+      {data.url ? (
+        <a
+          href={data.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block hover:scale-[1.02] transition-transform">
+          {badge}
+        </a>
+      ) : (
+        badge
+      )}
+    </motion.div>
+  );
+}
+
+/**
+ * Full section with the written reviews. Left out entirely when the listing has
+ * only star ratings — the score is already on the hero, so an extra section
+ * repeating it with nothing underneath would be noise.
+ */
 export function GoogleReviews() {
   const { t, lang } = useLang();
-  const [data, setData] = useState<ReviewsPayload | null>(null);
+  const data = useGoogleReviews();
   const trackRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`/api/reviews?lang=${lang}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((payload: ReviewsPayload) => {
-        if (!cancelled) setData(payload);
-      })
-      .catch(() => {
-        if (!cancelled) setData(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [lang]);
-
   const reviews = data?.reviews ?? [];
-  const hasRating = typeof data?.rating === "number";
-
-  // Until the Places key is set up, or if Google is unreachable, render nothing
-  // rather than an empty heading. A listing can also have plenty of star-only
-  // ratings and no written ones — then the score is still worth showing, and
-  // the carousel below simply appears once someone writes something.
-  if (!data?.configured || (!hasRating && reviews.length === 0)) return null;
+  if (!data?.configured || reviews.length === 0) return null;
 
   const scrollTo = (i: number) => {
     const track = trackRef.current;
@@ -129,7 +185,6 @@ export function GoogleReviews() {
           {t("reviews.title")}
         </motion.h2>
 
-        {/* Rating summary */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -141,9 +196,7 @@ export function GoogleReviews() {
           </p>
           <div className="flex items-center justify-center gap-3 flex-wrap">
             <span className="text-3xl md:text-4xl font-bold text-[#1A1A1A]">
-              {data.rating != null
-                ? data.rating.toFixed(1).replace(".", lang === "cs" ? "," : ".")
-                : "—"}
+              {typeof data.rating === "number" ? formatRating(data.rating, lang) : "—"}
             </span>
             <Stars value={data.rating ?? 0} className="w-6 h-6 md:w-7 md:h-7" />
             <span className="text-gray-500 text-lg">({data.total})</span>
@@ -159,8 +212,6 @@ export function GoogleReviews() {
           )}
         </motion.div>
 
-        {/* Carousel — omitted entirely when the listing has only star ratings */}
-        {reviews.length > 0 && (
         <div className="relative">
           <div
             ref={trackRef}
@@ -222,7 +273,6 @@ export function GoogleReviews() {
             </>
           )}
         </div>
-        )}
 
         {reviews.length > 1 && (
           <div className="flex justify-center gap-2 mt-6">

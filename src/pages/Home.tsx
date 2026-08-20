@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, ShieldCheck, Users } from "lucide-react";
 import { useContent } from "../contexts/ContentContext";
 import { LazyImage } from "../components/LazyImage";
-import { GoogleReviews } from "../components/GoogleReviews";
+import { GoogleReviews, GoogleRatingBadge } from "../components/GoogleReviews";
 import { getServiceIcon } from "../utils/serviceIcons";
 import { useLang } from "../contexts/LanguageContext";
 const heroImage = "/assets/hero.jpeg";
@@ -49,6 +49,9 @@ export function Home() {
                 {t("home.hero.cta")}
                 <ArrowRight className="w-6 h-6" />
               </Link>
+
+              {/* Google rating, sitting on the hero photo itself */}
+              <GoogleRatingBadge />
             </motion.div>
           </div>
         </div>
