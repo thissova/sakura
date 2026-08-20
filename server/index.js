@@ -587,7 +587,9 @@ app.get("/api/reviews", async (req, res) => {
     if (data.reviews.length === 0) {
       // Distinguish "Google sent nothing" from "Google sent some but none were
       // usable" — otherwise an empty section gives no clue which it was.
-      data.note = reviewsNote;
+      // Place ids are public, and having it here lets the listing be checked
+      // against Google's own Place ID finder without redeploying.
+      data.note = `placeId=${placeId} ${reviewsNote}`;
     }
     console.log(
       `Google reviews [${lang}]: rating=${data.rating} total=${data.total} ` +
