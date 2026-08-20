@@ -506,31 +506,33 @@ async function resolvePlaceId() {
 }
 
 app.get("/api/reviews", async (req, res) => {
-  const lang = req.query.lang === "en" ? "en" : "cs";
-
   // Before the key is configured, report "not set up" rather than failing, so
   // the front end can simply leave the section out.
   if (!GOOGLE_PLACES_API_KEY) {
     return res.json({ configured: false, reviews: [] });
   }
 
-  const cached = reviewsCache.get(lang);
+  // No languageCode is sent: asking for one made no difference to what Google
+  // returned, and leaving it off means reviews come back whatever language they
+  // were written in. The payload is language-neutral, so one cache entry serves
+  // both site languages and halves the number of billed calls.
+  const cached = reviewsCache.get("all");
   if (cached && cached.expires > Date.now()) {
     return res.json(cached.data);
   }
 
-  /** One Place Details call for a given field mask. `languageCode` optional. */
-  async function fetchPlace(placeId, fieldMask, languageCode) {
-    const url =
-      `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}` +
-      (languageCode ? `?languageCode=${languageCode}` : "");
-    const response = await fetch(url, {
-      headers: {
-        "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
-        // Places bills by the fields requested, so ask only for what is shown.
-        "X-Goog-FieldMask": fieldMask,
+  /** One Place Details call for a given field mask. */
+  async function fetchPlace(placeId, fieldMask) {
+    const response = await fetch(
+      `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
+      {
+        headers: {
+          "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
+          // Places bills by the fields requested, so ask only for what is shown.
+          "X-Goog-FieldMask": fieldMask,
+        },
       },
-    });
+    );
     if (!response.ok) {
       throw new Error(await describeFailure(response));
     }
@@ -539,29 +541,22 @@ app.get("/api/reviews", async (req, res) => {
 
   try {
     const placeId = await resolvePlaceId();
-    const place = await fetchPlace(
-      placeId,
-      "rating,userRatingCount,googleMapsUri",
-      lang,
-    );
+    const place = await fetchPlace(placeId, "rating,userRatingCount,googleMapsUri");
 
     // Reviews are requested on their own. Bundled into the mask above, Google
     // simply dropped the field from the response and left no clue why; asking
     // for it alone turns that silence into a real status code.
     let received = [];
     let reviewsNote = "";
-    for (const languageCode of [lang, null]) {
-      try {
-        const withReviews = await fetchPlace(placeId, "reviews", languageCode);
-        received = withReviews.reviews ?? [];
-        reviewsNote = `languageCode=${languageCode ?? "none"} returned=${received.length}`;
-        if (received.length) break;
-      } catch (err) {
-        reviewsNote = `languageCode=${languageCode ?? "none"} -> ${err.message}`;
-        console.error("Reviews request failed:", err.message);
-      }
+    try {
+      const withReviews = await fetchPlace(placeId, "reviews");
+      received = withReviews.reviews ?? [];
+      reviewsNote = `returned=${received.length}`;
+    } catch (err) {
+      reviewsNote = `failed -> ${err.message}`;
+      console.error("Reviews request failed:", err.message);
     }
-    console.log(`Places reviews [${lang}]: ${reviewsNote}`);
+    console.log(`Places reviews: ${reviewsNote}`);
     const data = {
       configured: true,
       rating: typeof place.rating === "number" ? place.rating : null,
@@ -592,11 +587,11 @@ app.get("/api/reviews", async (req, res) => {
       data.note = `placeId=${placeId} ${reviewsNote}`;
     }
     console.log(
-      `Google reviews [${lang}]: rating=${data.rating} total=${data.total} ` +
+      `Google reviews: rating=${data.rating} total=${data.total} ` +
         `received=${received.length} usable=${data.reviews.length}`,
     );
 
-    reviewsCache.set(lang, { data, expires: Date.now() + REVIEWS_TTL_MS });
+    reviewsCache.set("all", { data, expires: Date.now() + REVIEWS_TTL_MS });
     res.json(data);
   } catch (err) {
     console.error("Failed to load Google reviews:", err.message);
