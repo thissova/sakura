@@ -519,8 +519,8 @@ app.get("/api/reviews", async (req, res) => {
     return res.json(cached.data);
   }
 
-  /** One Place Details call. `languageCode` is optional. */
-  async function fetchPlace(placeId, languageCode) {
+  /** One Place Details call for a given field mask. `languageCode` optional. */
+  async function fetchPlace(placeId, fieldMask, languageCode) {
     const url =
       `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}` +
       (languageCode ? `?languageCode=${languageCode}` : "");
@@ -528,38 +528,40 @@ app.get("/api/reviews", async (req, res) => {
       headers: {
         "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
         // Places bills by the fields requested, so ask only for what is shown.
-        "X-Goog-FieldMask": "rating,userRatingCount,googleMapsUri,reviews",
+        "X-Goog-FieldMask": fieldMask,
       },
     });
     if (!response.ok) {
-      throw new Error(`place details failed: ${await describeFailure(response)}`);
+      throw new Error(await describeFailure(response));
     }
     return response.json();
   }
 
   try {
     const placeId = await resolvePlaceId();
-    let place = await fetchPlace(placeId, lang);
-    let usedLanguage = lang;
-
-    // Asking for a specific language can come back with no reviews at all when
-    // the ones on the listing are written in another language. Retry unfiltered
-    // before concluding there is nothing to show.
-    if (!place.reviews?.length) {
-      console.log(`No reviews for languageCode=${lang}; retrying without it`);
-      const unfiltered = await fetchPlace(placeId, null);
-      if (unfiltered.reviews?.length) {
-        place = unfiltered;
-        usedLanguage = "none";
-      }
-    }
-
-    console.log(
-      `Places response [${lang}]: keys=${Object.keys(place).join(",")} ` +
-        `languageUsed=${usedLanguage}`,
+    const place = await fetchPlace(
+      placeId,
+      "rating,userRatingCount,googleMapsUri",
+      lang,
     );
 
-    const received = place.reviews ?? [];
+    // Reviews are requested on their own. Bundled into the mask above, Google
+    // simply dropped the field from the response and left no clue why; asking
+    // for it alone turns that silence into a real status code.
+    let received = [];
+    let reviewsNote = "";
+    for (const languageCode of [lang, null]) {
+      try {
+        const withReviews = await fetchPlace(placeId, "reviews", languageCode);
+        received = withReviews.reviews ?? [];
+        reviewsNote = `languageCode=${languageCode ?? "none"} returned=${received.length}`;
+        if (received.length) break;
+      } catch (err) {
+        reviewsNote = `languageCode=${languageCode ?? "none"} -> ${err.message}`;
+        console.error("Reviews request failed:", err.message);
+      }
+    }
+    console.log(`Places reviews [${lang}]: ${reviewsNote}`);
     const data = {
       configured: true,
       rating: typeof place.rating === "number" ? place.rating : null,
@@ -585,9 +587,7 @@ app.get("/api/reviews", async (req, res) => {
     if (data.reviews.length === 0) {
       // Distinguish "Google sent nothing" from "Google sent some but none were
       // usable" — otherwise an empty section gives no clue which it was.
-      data.note =
-        `fields=${Object.keys(place).join("|")} received=${received.length} ` +
-        `languageUsed=${usedLanguage}`;
+      data.note = reviewsNote;
     }
     console.log(
       `Google reviews [${lang}]: rating=${data.rating} total=${data.total} ` +
