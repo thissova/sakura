@@ -519,11 +519,11 @@ app.get("/api/reviews", async (req, res) => {
     return res.json(cached.data);
   }
 
-  try {
-    const placeId = await resolvePlaceId();
+  /** One Place Details call. `languageCode` is optional. */
+  async function fetchPlace(placeId, languageCode) {
     const url =
       `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}` +
-      `?languageCode=${lang}`;
+      (languageCode ? `?languageCode=${languageCode}` : "");
     const response = await fetch(url, {
       headers: {
         "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
@@ -531,12 +531,34 @@ app.get("/api/reviews", async (req, res) => {
         "X-Goog-FieldMask": "rating,userRatingCount,googleMapsUri,reviews",
       },
     });
-
     if (!response.ok) {
       throw new Error(`place details failed: ${await describeFailure(response)}`);
     }
+    return response.json();
+  }
 
-    const place = await response.json();
+  try {
+    const placeId = await resolvePlaceId();
+    let place = await fetchPlace(placeId, lang);
+    let usedLanguage = lang;
+
+    // Asking for a specific language can come back with no reviews at all when
+    // the ones on the listing are written in another language. Retry unfiltered
+    // before concluding there is nothing to show.
+    if (!place.reviews?.length) {
+      console.log(`No reviews for languageCode=${lang}; retrying without it`);
+      const unfiltered = await fetchPlace(placeId, null);
+      if (unfiltered.reviews?.length) {
+        place = unfiltered;
+        usedLanguage = "none";
+      }
+    }
+
+    console.log(
+      `Places response [${lang}]: keys=${Object.keys(place).join(",")} ` +
+        `languageUsed=${usedLanguage}`,
+    );
+
     const received = place.reviews ?? [];
     const data = {
       configured: true,
@@ -561,7 +583,11 @@ app.get("/api/reviews", async (req, res) => {
     // return nothing to display. Record which case this is — otherwise an empty
     // section is indistinguishable from a broken one.
     if (data.reviews.length === 0) {
-      data.note = `google returned ${received.length} review(s), none with text`;
+      // Distinguish "Google sent nothing" from "Google sent some but none were
+      // usable" — otherwise an empty section gives no clue which it was.
+      data.note =
+        `fields=${Object.keys(place).join("|")} received=${received.length} ` +
+        `languageUsed=${usedLanguage}`;
     }
     console.log(
       `Google reviews [${lang}]: rating=${data.rating} total=${data.total} ` +
