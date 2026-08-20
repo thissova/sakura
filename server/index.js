@@ -537,6 +537,7 @@ app.get("/api/reviews", async (req, res) => {
     }
 
     const place = await response.json();
+    const received = place.reviews ?? [];
     const data = {
       configured: true,
       rating: typeof place.rating === "number" ? place.rating : null,
@@ -544,7 +545,7 @@ app.get("/api/reviews", async (req, res) => {
       url: place.googleMapsUri ?? null,
       // Google caps this at five and picks which ones; there is no way to ask
       // for more or to choose them.
-      reviews: (place.reviews ?? [])
+      reviews: received
         .map((r) => ({
           author: r.authorAttribution?.displayName ?? "",
           avatar: r.authorAttribution?.photoUri ?? null,
@@ -555,6 +556,17 @@ app.get("/api/reviews", async (req, res) => {
         }))
         .filter((r) => r.text && r.author),
     };
+
+    // Star-only ratings carry no text, so a listing can have a rating and still
+    // return nothing to display. Record which case this is — otherwise an empty
+    // section is indistinguishable from a broken one.
+    if (data.reviews.length === 0) {
+      data.note = `google returned ${received.length} review(s), none with text`;
+    }
+    console.log(
+      `Google reviews [${lang}]: rating=${data.rating} total=${data.total} ` +
+        `received=${received.length} usable=${data.reviews.length}`,
+    );
 
     reviewsCache.set(lang, { data, expires: Date.now() + REVIEWS_TTL_MS });
     res.json(data);
