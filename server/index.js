@@ -541,7 +541,10 @@ app.get("/api/reviews", async (req, res) => {
 
   try {
     const placeId = await resolvePlaceId();
-    const place = await fetchPlace(placeId, "rating,userRatingCount,googleMapsUri");
+    const place = await fetchPlace(
+      placeId,
+      "rating,userRatingCount,googleMapsUri,pureServiceAreaBusiness",
+    );
 
     // Reviews are requested on their own. Bundled into the mask above, Google
     // simply dropped the field from the response and left no clue why; asking
@@ -557,20 +560,13 @@ app.get("/api/reviews", async (req, res) => {
       console.error("Reviews request failed:", err.message);
     }
 
-    // The listing plainly has written reviews, so an empty result means the
-    // request is wrong rather than the data missing. Asking for everything says
-    // which fields this key can actually see. Costly, so only as a fallback.
-    if (received.length === 0) {
-      try {
-        const everything = await fetchPlace(placeId, "*");
-        const keys = Object.keys(everything);
-        received = everything.reviews ?? [];
-        reviewsNote += ` | mask=* returned=${received.length} keys=${keys.join(",")}`;
-        console.log(`Places full response keys: ${keys.join(",")}`);
-      } catch (err) {
-        reviewsNote += ` | mask=* failed -> ${err.message}`;
-        console.error("Full-field request failed:", err.message);
-      }
+    // Asking for every field returned 33 of them for this listing and no
+    // `reviews` key at all, so the empty result is Google withholding the data
+    // rather than a wrong request. The listing is flagged
+    // pureServiceAreaBusiness — no address customers visit — which is the most
+    // likely reason. Recorded so an empty carousel is explainable later.
+    if (received.length === 0 && place.pureServiceAreaBusiness) {
+      reviewsNote += " | pureServiceAreaBusiness=true (Google withholds reviews)";
     }
     console.log(`Places reviews: ${reviewsNote}`);
     const data = {
