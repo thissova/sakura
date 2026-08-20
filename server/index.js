@@ -521,6 +521,27 @@ app.get("/api/reviews", async (req, res) => {
     return res.json(cached.data);
   }
 
+  /**
+   * The pre-2023 Places endpoint. Separate implementation from the v1 API, and
+   * it returns reviews for some listings the new one omits. Its key goes in the
+   * query string by design, so the URL is never logged.
+   */
+  async function fetchLegacyReviews(placeId) {
+    const url =
+      "https://maps.googleapis.com/maps/api/place/details/json" +
+      `?place_id=${encodeURIComponent(placeId)}` +
+      "&fields=reviews&reviews_no_translations=true" +
+      `&key=${encodeURIComponent(GOOGLE_PLACES_API_KEY)}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`http ${response.status}`);
+    const body = await response.json();
+    // This API reports failures in the body with a 200, unlike the v1 one.
+    if (body.status !== "OK") {
+      throw new Error(`${body.status}${body.error_message ? `: ${body.error_message}` : ""}`);
+    }
+    return body.result?.reviews ?? [];
+  }
+
   /** One Place Details call for a given field mask. */
   async function fetchPlace(placeId, fieldMask) {
     const response = await fetch(
@@ -560,13 +581,28 @@ app.get("/api/reviews", async (req, res) => {
       console.error("Reviews request failed:", err.message);
     }
 
-    // Asking for every field returned 33 of them for this listing and no
-    // `reviews` key at all, so the empty result is Google withholding the data
-    // rather than a wrong request. The listing is flagged
-    // pureServiceAreaBusiness — no address customers visit — which is the most
-    // likely reason. Recorded so an empty carousel is explainable later.
-    if (received.length === 0 && place.pureServiceAreaBusiness) {
-      reviewsNote += " | pureServiceAreaBusiness=true (Google withholds reviews)";
+    // Asking the new API for every field returned 33 of them and no `reviews`
+    // key at all, so it will not serve review text for this listing. The legacy
+    // Places endpoint is a separate implementation and does return reviews for
+    // some listings the new one does not, so try it before giving up.
+    if (received.length === 0) {
+      try {
+        const legacy = await fetchLegacyReviews(placeId);
+        received = legacy.map((r) => ({
+          rating: r.rating,
+          relativePublishTimeDescription: r.relative_time_description,
+          text: { text: r.text },
+          authorAttribution: {
+            displayName: r.author_name,
+            photoUri: r.profile_photo_url,
+            uri: r.author_url,
+          },
+        }));
+        reviewsNote += ` | legacy returned=${received.length}`;
+      } catch (err) {
+        reviewsNote += ` | legacy failed -> ${err.message}`;
+        console.error("Legacy reviews request failed:", err.message);
+      }
     }
     console.log(`Places reviews: ${reviewsNote}`);
     const data = {
