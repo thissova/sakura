@@ -551,10 +551,26 @@ app.get("/api/reviews", async (req, res) => {
     try {
       const withReviews = await fetchPlace(placeId, "reviews");
       received = withReviews.reviews ?? [];
-      reviewsNote = `returned=${received.length}`;
+      reviewsNote = `mask=reviews returned=${received.length}`;
     } catch (err) {
-      reviewsNote = `failed -> ${err.message}`;
+      reviewsNote = `mask=reviews failed -> ${err.message}`;
       console.error("Reviews request failed:", err.message);
+    }
+
+    // The listing plainly has written reviews, so an empty result means the
+    // request is wrong rather than the data missing. Asking for everything says
+    // which fields this key can actually see. Costly, so only as a fallback.
+    if (received.length === 0) {
+      try {
+        const everything = await fetchPlace(placeId, "*");
+        const keys = Object.keys(everything);
+        received = everything.reviews ?? [];
+        reviewsNote += ` | mask=* returned=${received.length} keys=${keys.join(",")}`;
+        console.log(`Places full response keys: ${keys.join(",")}`);
+      } catch (err) {
+        reviewsNote += ` | mask=* failed -> ${err.message}`;
+        console.error("Full-field request failed:", err.message);
+      }
     }
     console.log(`Places reviews: ${reviewsNote}`);
     const data = {
