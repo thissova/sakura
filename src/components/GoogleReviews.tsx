@@ -86,10 +86,13 @@ export function GoogleReviews() {
   }, [lang]);
 
   const reviews = data?.reviews ?? [];
+  const hasRating = typeof data?.rating === "number";
 
   // Until the Places key is set up, or if Google is unreachable, render nothing
-  // rather than an empty heading.
-  if (!data?.configured || reviews.length === 0) return null;
+  // rather than an empty heading. A listing can also have plenty of star-only
+  // ratings and no written ones — then the score is still worth showing, and
+  // the carousel below simply appears once someone writes something.
+  if (!data?.configured || (!hasRating && reviews.length === 0)) return null;
 
   const scrollTo = (i: number) => {
     const track = trackRef.current;
@@ -156,7 +159,8 @@ export function GoogleReviews() {
           )}
         </motion.div>
 
-        {/* Carousel */}
+        {/* Carousel — omitted entirely when the listing has only star ratings */}
+        {reviews.length > 0 && (
         <div className="relative">
           <div
             ref={trackRef}
@@ -218,6 +222,7 @@ export function GoogleReviews() {
             </>
           )}
         </div>
+        )}
 
         {reviews.length > 1 && (
           <div className="flex justify-center gap-2 mt-6">
