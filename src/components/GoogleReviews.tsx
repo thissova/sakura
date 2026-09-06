@@ -21,29 +21,34 @@ interface ReviewsPayload {
   reviews: Review[];
 }
 
-// The badge and the section below both need this, and the payload is the same
-// for everyone, so the request is shared rather than made twice per page load.
-let pending: Promise<ReviewsPayload | null> | null = null;
-function loadReviews() {
-  if (!pending) {
-    pending = fetch("/api/reviews")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .catch(() => null);
+// The badge and the section below both need this, so the request is shared
+// rather than made twice per page load. Keyed by language because the review
+// bodies and the "2 months ago" line come back localised.
+const pending = new Map<string, Promise<ReviewsPayload | null>>();
+function loadReviews(lang: string) {
+  if (!pending.has(lang)) {
+    pending.set(
+      lang,
+      fetch(`/api/reviews?lang=${lang}`)
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+        .catch(() => null),
+    );
   }
-  return pending;
+  return pending.get(lang)!;
 }
 
 function useGoogleReviews() {
+  const { lang } = useLang();
   const [data, setData] = useState<ReviewsPayload | null>(null);
   useEffect(() => {
     let alive = true;
-    loadReviews().then((d) => {
+    loadReviews(lang).then((d) => {
       if (alive) setData(d);
     });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [lang]);
   return data;
 }
 

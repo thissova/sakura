@@ -512,11 +512,10 @@ app.get("/api/reviews", async (req, res) => {
     return res.json({ configured: false, reviews: [] });
   }
 
-  // No languageCode is sent: asking for one made no difference to what Google
-  // returned, and leaving it off means reviews come back whatever language they
-  // were written in. The payload is language-neutral, so one cache entry serves
-  // both site languages and halves the number of billed calls.
-  const cached = reviewsCache.get("all");
+  // Reviews are requested in the page's language so Google localises the body
+  // and the "2 months ago" line. Cached per language, two entries in total.
+  const lang = req.query.lang === "en" ? "en" : "cs";
+  const cached = reviewsCache.get(lang);
   if (cached && cached.expires > Date.now()) {
     return res.json(cached.data);
   }
@@ -545,7 +544,8 @@ app.get("/api/reviews", async (req, res) => {
   /** One Place Details call for a given field mask. */
   async function fetchPlace(placeId, fieldMask) {
     const response = await fetch(
-      `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
+      `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}` +
+        `?languageCode=${lang}`,
       {
         headers: {
           "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
@@ -591,7 +591,13 @@ app.get("/api/reviews", async (req, res) => {
         received = legacy.map((r) => ({
           rating: r.rating,
           relativePublishTimeDescription: r.relative_time_description,
-          text: { text: r.text },
+          text: { text: r.text, languageCode: r.language },
+          // This endpoint names the language differently; carry it across so the
+          // Czech-only filter below works the same whichever API answered.
+          originalText: {
+            text: r.text,
+            languageCode: r.original_language ?? r.language,
+          },
           authorAttribution: {
             displayName: r.author_name,
             photoUri: r.profile_photo_url,
@@ -618,10 +624,21 @@ app.get("/api/reviews", async (req, res) => {
           avatar: r.authorAttribution?.photoUri ?? null,
           profileUrl: r.authorAttribution?.uri ?? null,
           rating: typeof r.rating === "number" ? r.rating : 5,
+          // `text` is localised to the page language; `originalText` is what the
+          // reviewer actually typed, and its language is what we filter on.
           text: (r.text?.text ?? r.originalText?.text ?? "").trim(),
+          writtenIn: (
+            r.originalText?.languageCode ??
+            r.text?.languageCode ??
+            ""
+          ).toLowerCase(),
           relativeTime: r.relativePublishTimeDescription ?? "",
         }))
-        .filter((r) => r.text && r.author),
+        .filter((r) => r.text && r.author)
+        // Client asked for Czech customers only. Reviews written in other
+        // languages are dropped rather than shown machine-translated.
+        .filter((r) => r.writtenIn.startsWith("cs"))
+        .map(({ writtenIn, ...rest }) => rest),
     };
 
     // Star-only ratings carry no text, so a listing can have a rating and still
@@ -639,7 +656,7 @@ app.get("/api/reviews", async (req, res) => {
         `received=${received.length} usable=${data.reviews.length}`,
     );
 
-    reviewsCache.set("all", { data, expires: Date.now() + REVIEWS_TTL_MS });
+    reviewsCache.set(lang, { data, expires: Date.now() + REVIEWS_TTL_MS });
     res.json(data);
   } catch (err) {
     console.error("Failed to load Google reviews:", err.message);
