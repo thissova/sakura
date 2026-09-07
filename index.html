@@ -34,9 +34,11 @@
       gtag("config", "G-T3M769KGE4");
     </script>
 
-    <!-- Favicon -->
-    <link rel="icon" type="image/png" href="/assets/icon.png" />
-    <link rel="apple-touch-icon" href="/assets/icon.png" />
+    <!-- Favicon. Google looks for /favicon.ico at the root first and wants a
+         square that is a multiple of 48px, so both are provided explicitly. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/assets/icon.png" />
 
     <!-- LCP element: hero is a CSS background, so the preload scanner cannot
          find it on its own. Preloading removes a full round trip from LCP. -->
