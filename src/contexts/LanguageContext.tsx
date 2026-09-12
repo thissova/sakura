@@ -18,7 +18,7 @@ const translations: Record<string, Record<Lang, string>> = {
   "nav.services": { cs: "O službách", en: "Services" },
   "nav.pricing": { cs: "Ceník", en: "Pricing" },
   "nav.contact": { cs: "Kontakt", en: "Contact" },
-  "nav.book": { cs: "Rezervace", en: "Book now" },
+  "nav.book": { cs: "Objednat", en: "Book now" },
 
   // Home
   "home.tagline": {
@@ -33,7 +33,7 @@ const translations: Record<string, Record<Lang, string>> = {
     cs: "Čistota, na kterou se můžete spolehnout",
     en: "Cleanliness you can rely on",
   },
-  "home.hero.cta": { cs: "Rezervovat úklid", en: "Book a cleaning" },
+  "home.hero.cta": { cs: "Objednat úklid", en: "Book a cleaning" },
   "home.why.title": { cs: "Proč si vybrat nás?", en: "Why choose us?" },
   "home.why.b1": {
     cs: "Rychlý a kvalitní úklid",
@@ -102,7 +102,7 @@ const translations: Record<string, Record<Lang, string>> = {
     cs: "Kvalitní úklid v Praze a okolí za férové ceny",
     en: "Quality cleaning in Prague and surroundings at fair prices",
   },
-  "pricing.book": { cs: "Rezervovat", en: "Book" },
+  "pricing.book": { cs: "Objednat", en: "Book" },
   "pricing.price": { cs: "Ceník", en: "Pricing" },
   "pricing.info.title": {
     cs: "Důležité informace",

@@ -27,7 +27,11 @@ export function Home() {
           className="absolute inset-0 z-0"
           style={{
             backgroundImage: `url(${heroImage})`,
-            backgroundPosition: "center",
+            // The photo is 4:3 and the hero is much wider, so desktop crops it
+            // top and bottom. Centred, that cut off both people's heads; 25%
+            // keeps the faces whole. Phones crop the sides instead, so this
+            // only moves the framing on wide screens.
+            backgroundPosition: "center 25%",
             backgroundSize: "cover",
           }}>
           <div className="absolute inset-0 bg-black/40"></div>
