@@ -4,6 +4,7 @@ import { ArrowRight, ShieldCheck, Users } from "lucide-react";
 import { useContent } from "../contexts/ContentContext";
 import { LazyImage } from "../components/LazyImage";
 import { GoogleRatingBadge } from "../components/GoogleReviews";
+import { BeforeAfterCarousel } from "../components/BeforeAfterCarousel";
 import { getServiceIcon } from "../utils/serviceIcons";
 import { useLang } from "../contexts/LanguageContext";
 const heroImage = "/assets/hero.jpeg";
@@ -67,6 +68,9 @@ export function Home() {
           <p className="font-serif italic text-2xl md:text-3xl lg:text-4xl text-sakura-green leading-relaxed">
             {t("home.tagline")}
           </p>
+
+          {/* Before/after photos, directly under the company description */}
+          <BeforeAfterCarousel />
         </div>
       </section>
 

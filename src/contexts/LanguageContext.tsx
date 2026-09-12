@@ -194,6 +194,12 @@ const translations: Record<string, Record<Lang, string>> = {
   },
   "404.back": { cs: "Zpět na úvod", en: "Back to home" },
 
+  // Before/after gallery
+  "gallery.alt": { cs: "Před a po úklidu – ukázka", en: "Before and after cleaning – example" },
+  "gallery.prev": { cs: "Předchozí fotografie", en: "Previous photo" },
+  "gallery.next": { cs: "Další fotografie", en: "Next photo" },
+  "gallery.slide": { cs: "Fotografie", en: "Photo" },
+
   // Thank-you page
   "thanks.urgent": {
     cs: "Potřebujete se ozvat dříve? Zavolejte nám nebo napište na WhatsApp:",
