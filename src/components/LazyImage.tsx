@@ -36,7 +36,12 @@ export function LazyImage({
           alt={alt}
           loading={priority ? "eager" : "lazy"}
           decoding="async"
-          fetchPriority={priority ? "high" : "auto"}
+          // Only emitted when it says something: "auto" is the default, so
+          // setting it everywhere just added an attribute that changes nothing.
+          // All-lowercase on purpose — React 18 does not know the camelCase
+          // `fetchPriority` prop, it warns and drops it, so the hint never
+          // reached the DOM at all. React 19 adds it; this spelling works today.
+          {...(priority ? ({ fetchpriority: "high" } as Record<string, string>) : {})}
           className={`${className} transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
           onLoad={() => setLoaded(true)}
           onError={() => {
