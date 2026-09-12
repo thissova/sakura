@@ -185,6 +185,7 @@ const translations: Record<string, Record<Lang, string>> = {
     cs: "Napište nám na WhatsApp",
     en: "Message us on WhatsApp",
   },
+  "whatsapp.label": { cs: "Napište nám", en: "Message us" },
 
   // 404
   "404.title": { cs: "Stránka nenalezena", en: "Page not found" },
