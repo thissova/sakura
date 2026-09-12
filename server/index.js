@@ -1,5 +1,6 @@
 import express from "express";
 import compression from "compression";
+import sharp from "sharp";
 import multer from "multer";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -22,13 +23,28 @@ const ROOT = join(__dirname, "..");
 
 const IS_VERCEL = !!process.env.VERCEL;
 
+// Where admin edits live. The app directory is rebuilt from git on every deploy,
+// so anything written into it — content.json, uploaded photos — is gone after
+// the next push; that is why admin changes never stuck in production. Railway
+// sets RAILWAY_VOLUME_MOUNT_PATH when a volume is attached, and with one, edits
+// survive deploys and restarts. DATA_DIR does the same on any other host.
+// Without either, behaviour is unchanged, which is fine for local development.
+const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.DATA_DIR || "";
+const BUNDLED_CONTENT_FILE = join(__dirname, "content.json");
+
 // On Vercel /tmp is the only writable directory
-const CONTENT_FILE = IS_VERCEL
-  ? "/tmp/sakura-content.json"
-  : join(__dirname, "content.json");
+const CONTENT_FILE = DATA_DIR
+  ? join(DATA_DIR, "content.json")
+  : IS_VERCEL
+    ? "/tmp/sakura-content.json"
+    : BUNDLED_CONTENT_FILE;
 
 const ASSETS_DIR = join(ROOT, "public", "assets");
-const ASSETS_WRITE_DIR = IS_VERCEL ? "/tmp/assets" : ASSETS_DIR;
+const ASSETS_WRITE_DIR = DATA_DIR
+  ? join(DATA_DIR, "uploads")
+  : IS_VERCEL
+    ? "/tmp/assets"
+    : ASSETS_DIR;
 
 const SRC_ASSETS_DIR = join(ROOT, "src", "assets");
 
@@ -271,9 +287,20 @@ function getDefaults() {
   ];
 }
 
-// Init content.json if it doesn't exist (local dev only)
+// First boot on a fresh volume: start from the committed content rather than the
+// hardcoded defaults, so attaching a volume does not change the live site. From
+// then on the volume copy is the source of truth.
 if (!IS_VERCEL && !existsSync(CONTENT_FILE)) {
-  writeContent(getDefaults());
+  if (CONTENT_FILE !== BUNDLED_CONTENT_FILE && existsSync(BUNDLED_CONTENT_FILE)) {
+    copyFileSync(BUNDLED_CONTENT_FILE, CONTENT_FILE);
+  } else {
+    writeContent(getDefaults());
+  }
+}
+if (DATA_DIR) {
+  console.log(`Persistent storage: ${DATA_DIR}`);
+} else if (!IS_VERCEL) {
+  console.warn("No volume attached — admin edits will be lost on the next deploy");
 }
 
 // ─── Admin credentials ───────────────────────────────────────────────────────
@@ -298,6 +325,15 @@ function isValidSession(token) {
 }
 
 const app = express();
+// Railway terminates TLS in front of the app. Without this req.secure is always
+// false, so the session cookie could not be marked Secure correctly.
+app.set("trust proxy", 1);
+
+/** Write endpoints are admin-only. */
+function requireAuth(req, res, next) {
+  if (isValidSession(req.cookies?.sakura_session)) return next();
+  res.status(401).json({ error: "unauthorized" });
+}
 
 // Both sakura-uklid.com and www.sakura-uklid.com point at this app, which would
 // let Google index the same pages twice. Canonical host is www — it is what the
@@ -337,8 +373,15 @@ function setAssetCacheHeaders(res, filePath) {
   }
 }
 
-// Serve uploaded assets (local dev)
+// Uploaded photos first, so a freshly uploaded image wins over a bundled file
+// of the same name; then the images shipped with the build.
 if (!IS_VERCEL) {
+  if (ASSETS_WRITE_DIR !== ASSETS_DIR) {
+    app.use(
+      "/assets",
+      express.static(ASSETS_WRITE_DIR, { setHeaders: setAssetCacheHeaders }),
+    );
+  }
   app.use(
     "/assets",
     express.static(ASSETS_DIR, { setHeaders: setAssetCacheHeaders }),
@@ -353,8 +396,10 @@ app.post('/api/admin/login', (req, res) => {
     const token = createSession();
     res.cookie('sakura_session', token, {
       httpOnly: true,
-      sameSite: 'none',
-      secure: true,
+      // The admin is same-origin, so 'lax' is enough. 'none' demanded Secure,
+      // which browsers refuse over plain http, so local logins never stuck.
+      sameSite: 'lax',
+      secure: req.secure,
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     return res.json({ ok: true });
@@ -386,14 +431,16 @@ app.get("/api/content", (req, res) => {
   res.json(readContent());
 });
 
-app.post("/api/content", (req, res) => {
+// Writes used to be open to anyone: a plain POST replaced the whole site's
+// content without logging in. An admin session is required now.
+app.post("/api/content", requireAuth, (req, res) => {
   if (!Array.isArray(req.body))
     return res.status(400).json({ error: "Expected array" });
   writeContent(req.body);
   res.json({ ok: true });
 });
 
-app.post("/api/content/reset", (req, res) => {
+app.post("/api/content/reset", requireAuth, (req, res) => {
   const defaults = getDefaults();
   writeContent(defaults);
   res.json(defaults);
@@ -401,31 +448,52 @@ app.post("/api/content/reset", (req, res) => {
 
 // ── Upload API ───────────────────────────────────────────────────────────────
 
-app.post("/api/upload/:serviceId", upload.single("image"), (req, res) => {
+app.post("/api/upload/:serviceId", requireAuth, upload.single("image"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
   const { serviceId } = req.params;
-  const ext = extname(req.file.originalname).toLowerCase() || ".jpg";
-  const filename = `${serviceId}${ext}`;
+  // Route params are URL-decoded, so an id carrying an encoded "../" would
+  // otherwise let a filename escape the uploads directory.
+  if (!/^[a-z0-9-]+$/i.test(serviceId)) {
+    return res.status(400).json({ error: "invalid service id" });
+  }
+
+  // Always re-encode. A photo straight off a phone is 5–10 MB and thousands of
+  // pixels wide — the exact weight that made the site crawl before — and an
+  // iPhone HEIC would not display in most browsers at all.
+  let output;
+  try {
+    output = await sharp(req.file.buffer)
+      .rotate()
+      .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 80, mozjpeg: true, progressive: true })
+      .toBuffer();
+  } catch {
+    return res.status(415).json({ error: "unsupported image" });
+  }
+
+  const filename = `${serviceId}.jpg`;
   const destPath = join(ASSETS_WRITE_DIR, filename);
 
-  // Delete old file if extension changed
+  // Remove this service's previous upload if it had a different name.
   const content = readContent();
   const service = content.find((s) => s.id === serviceId);
   if (service?.image?.startsWith("/assets/")) {
-    const oldFilename = service.image.replace("/assets/", "");
+    const oldFilename = service.image.replace("/assets/", "").split("?")[0];
     const oldPath = join(ASSETS_WRITE_DIR, oldFilename);
     if (existsSync(oldPath) && oldPath !== destPath) {
       try { unlinkSync(oldPath); } catch {}
     }
   }
 
-  writeFileSync(destPath, req.file.buffer);
+  writeFileSync(destPath, output);
 
-  // On Vercel, serve from /tmp via a special path
+  // Re-uploading keeps the same filename, so the version query is what makes
+  // the admin and the site show the new photo instead of a cached old one.
+  const version = `?v=${Date.now()}`;
   const publicPath = IS_VERCEL
-    ? `/api/assets/${filename}`
-    : `/assets/${filename}`;
+    ? `/api/assets/${filename}${version}`
+    : `/assets/${filename}${version}`;
 
   res.json({ path: publicPath });
 });

@@ -19,6 +19,9 @@ export interface ServiceData {
 
 interface ContentContextType {
   services: ServiceData[];
+  /** Set when the last save was rejected; "unauthorized" means the session ended. */
+  saveError: "unauthorized" | "failed" | null;
+  clearSaveError: () => void;
   updateService: (id: string, patch: Partial<ServiceData>) => void;
   addService: (service: ServiceData) => void;
   deleteService: (id: string) => void;
@@ -97,12 +100,26 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
       });
   }, []);
 
+  const [saveError, setSaveError] = useState<"unauthorized" | "failed" | null>(null);
+
+  // A rejected save used to vanish into console.error while the admin showed a
+  // success toast, so a save that never happened looked exactly like one that did.
   const saveToServer = (next: ServiceData[]) => {
     fetch("/api/content", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify(next),
-    }).catch((err) => console.error("Failed to save content:", err));
+    })
+      .then((r) => {
+        if (r.status === 401) throw new Error("unauthorized");
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        setSaveError(null);
+      })
+      .catch((err) => {
+        console.error("Failed to save content:", err);
+        setSaveError(err.message === "unauthorized" ? "unauthorized" : "failed");
+      });
   };
 
   const updateService = (id: string, patch: Partial<ServiceData>) => {
@@ -114,10 +131,17 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetToDefaults = () => {
-    fetch("/api/content/reset", { method: "POST" })
-      .then((r) => r.json())
+    fetch("/api/content/reset", { method: "POST", credentials: "same-origin" })
+      .then((r) => {
+        if (r.status === 401) throw new Error("unauthorized");
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then((defaults: ServiceData[]) => setServices(defaults))
-      .catch((err) => console.error("Failed to reset:", err));
+      .catch((err) => {
+        console.error("Failed to reset:", err);
+        setSaveError(err.message === "unauthorized" ? "unauthorized" : "failed");
+      });
   };
 
   const addService = (service: ServiceData) => {
@@ -151,6 +175,8 @@ export function ContentProvider({ children }: { children: React.ReactNode }) {
     <ContentContext.Provider
       value={{
         services,
+        saveError,
+        clearSaveError: () => setSaveError(null),
         updateService,
         addService,
         deleteService,

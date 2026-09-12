@@ -78,6 +78,8 @@ export function Admin() {
     reorderServices,
     saveAll,
     resetToDefaults,
+    saveError,
+    clearSaveError,
   } = useContent();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -99,6 +101,18 @@ export function Admin() {
     setTimeout(() => setToast(null), 3000);
   };
 
+  // Surface a rejected save instead of letting the earlier success toast stand.
+  React.useEffect(() => {
+    if (!saveError) return;
+    showToast(
+      saveError === "unauthorized"
+        ? "Přihlášení vypršelo — přihlaste se znovu, změna se neuložila"
+        : "Chyba při ukládání — změna se neuložila",
+    );
+    clearSaveError();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveError]);
+
   const handleImageUpload = async (serviceId: string, file: File) => {
     setUploadingId(serviceId);
     const formData = new FormData();
@@ -106,8 +120,20 @@ export function Admin() {
     try {
       const res = await fetch(`/api/upload/${serviceId}`, {
         method: "POST",
+        credentials: "same-origin",
         body: formData,
       });
+      // A failed upload used to fall through silently: no path, no message.
+      if (!res.ok) {
+        showToast(
+          res.status === 401
+            ? "Přihlášení vypršelo — přihlaste se znovu"
+            : res.status === 415
+              ? "Tento formát obrázku není podporován (použijte JPG nebo PNG)"
+              : "Chyba při nahrávání obrázku",
+        );
+        return;
+      }
       const data = await res.json();
       if (data.path) {
         updateService(serviceId, { image: data.path });
