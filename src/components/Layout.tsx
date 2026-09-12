@@ -3,6 +3,7 @@ import { Outlet, NavLink, Link, useLocation } from "react-router-dom";
 import { Calendar, Menu, X, MapPin, Phone, Mail } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLang } from "../contexts/LanguageContext";
+import { WhatsAppButton } from "./WhatsAppButton";
 const sakuraLogo = "/assets/icon.png";
 
 function FooterLangToggle() {
@@ -210,6 +211,9 @@ export function Layout() {
           </div>
         </div>
       </footer>
+
+      {/* Lives in Layout, so it shows on every public page but not the admin. */}
+      <WhatsAppButton />
     </div>
   );
 }
